@@ -58,22 +58,38 @@ class AthleteProfile(models.Model):
         return f"Athlete Profile: {self.user.username}"
 
 
+
 class ProfessionalProfile(models.Model):
     """
     Stores data specific to Coaches and Professionals.
     Linked One-to-One with the CustomUser model.
     """
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='professional_profile')
+    user = models.OneToOneField('CustomUser', on_delete=models.CASCADE, related_name='professional_profile')
     
-    # Professional-specific fields based on the PRD
-    speciality = models.CharField(max_length=100, help_text="e.g., Batting Coach, Gym Trainer")
+    # REPLACE the old CharField with this ForeignKey:
+    speciality = models.ForeignKey(
+        'sports.Specialty', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        help_text="The verified taxonomy role (e.g., Batting Coach, Gym Trainer)"
+    )
+    
     is_certified = models.BooleanField(default=False, help_text="Checked by Admin upon verification")
     address = models.TextField(blank=True)
     academy_name = models.CharField(max_length=150, blank=True)
+    session_price = models.DecimalField(
+        max_digits=8, 
+        decimal_places=2, 
+        default=0.00, 
+        help_text="Standard rate per session in INR"
+    )
+    
     bank_details = models.TextField(blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Pro Profile: {self.user.username} ({self.speciality})"
+        speciality_name = self.speciality.name if self.speciality else "Unassigned"
+        return f"Pro Profile: {self.user.username} ({speciality_name})"
