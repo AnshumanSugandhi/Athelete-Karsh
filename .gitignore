@@ -1,0 +1,22 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local Database
+db.sqlite3
+db.sqlite3-journal
+
+# Local Environment Variables & Secrets
+.env
+.env.local
+
+# IDE / Editor folders
+.vscode/
+.idea/
+.DS_Store
