@@ -31,6 +31,22 @@ class BookingViewSet(viewsets.ModelViewSet):
     serializer_class = BookingSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    # ADD THIS METHOD:
+    def get_queryset(self):
+        """Filters bookings so users only see their own data."""
+        user = self.request.user
+        
+        # Athletes only see bookings they purchased
+        if user.role == 'ATHLETE':
+            return Booking.objects.filter(athlete=user).order_by('-created_at')
+            
+        # Professionals only see bookings tied to their slots
+        elif user.role == 'PROFESSIONAL':
+            return Booking.objects.filter(slot__professional=user).order_by('slot__date', 'slot__start_time')
+            
+        # Admins see everything
+        return Booking.objects.all()
+
     def perform_create(self, serializer):
         slot = serializer.validated_data['slot']
         amount_in_paise = int(slot.price * 100)
@@ -54,43 +70,38 @@ class BookingViewSet(viewsets.ModelViewSet):
             payment_status='PENDING'
         )
 
-    # ADD THIS NEW METHOD:
-    @action(detail=False, methods=['post'])
-    def verify_payment(self, request):
+    @action(detail=True, methods=['post'])
+    def verify_payment(self, request, pk=None):
         """
-        React calls this after Razorpay succeeds. 
-        We verify the digital signature to prevent fraud, then lock the slot.
+        Receives payment success details from React, mathematically verifies 
+        the signature using our secret key, and marks the booking as PAID.
         """
-        razorpay_order_id = request.data.get('razorpay_order_id')
+        booking = self.get_object()
+        
+        # 1. Grab the exact data Razorpay handed to the React frontend
         razorpay_payment_id = request.data.get('razorpay_payment_id')
+        razorpay_order_id = request.data.get('razorpay_order_id')
         razorpay_signature = request.data.get('razorpay_signature')
-
+        
+        # 2. Initialize the Razorpay SDK
         client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
-
+        
         try:
-            # 1. Ask the SDK to mathematically verify the signature
+            # 3. Ask Razorpay to mathematically verify the signature
             client.utility.verify_payment_signature({
                 'razorpay_order_id': razorpay_order_id,
                 'razorpay_payment_id': razorpay_payment_id,
                 'razorpay_signature': razorpay_signature
             })
             
-            # 2. If it doesn't crash, the payment is 100% authentic!
-            # Find the booking and update it
-            booking = Booking.objects.get(razorpay_order_id=razorpay_order_id)
+            # 4. If the code reaches this line, the payment is 100% authentic!
             booking.payment_status = 'PAID'
-            booking.razorpay_payment_id = razorpay_payment_id
-            booking.razorpay_signature = razorpay_signature
             booking.save()
-
-            # 3. Lock the professional's calendar slot!
-            slot = booking.slot
-            slot.is_booked = True
-            slot.save()
-
-            return Response({'status': 'Payment verified successfully'}, status=status.HTTP_200_OK)
+            
+            return Response({'status': 'Payment verified and booking secured!'}, status=status.HTTP_200_OK)
             
         except razorpay.errors.SignatureVerificationError:
+            # If the signature is fake or tampered with, reject it.
             return Response({'error': 'Invalid payment signature'}, status=status.HTTP_400_BAD_REQUEST)
-        except Booking.DoesNotExist:
-            return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+    
