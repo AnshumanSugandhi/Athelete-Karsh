@@ -121,11 +121,10 @@ REST_AUTH = {
     'JWT_AUTH_COOKIE': 'my-app-auth',
     'JWT_AUTH_REFRESH_COOKIE': 'my-refresh-token',
     'JWT_AUTH_HTTPONLY': False,
+    'USER_DETAILS_SERIALIZER': 'accounts.serializers.UserSerializer',
+
 }
 
-REST_AUTH_SERIALIZERS = {
-    'USER_DETAILS_SERIALIZER': 'accounts.serializers.UserSerializer',
-}
 # 5. Disable email verification for now (since HR creates the professional accounts)
 ACCOUNT_EMAIL_VERIFICATION = 'none'
 
@@ -181,9 +180,11 @@ STATIC_URL = 'static/'
 # Whitelist the specific frontend URLs that are allowed to make API calls
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Standard Create React App port
-    "http://localhost:5173",  # Standard Vite React port
+    "http://localhost:5173",
+    "http://localhost:5174",# Standard Vite React port
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
 ]
 
 # Allow cookies to be sent across domains (vital for maintaining login sessions)
