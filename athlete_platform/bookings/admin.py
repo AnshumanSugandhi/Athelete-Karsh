@@ -4,8 +4,8 @@ from .models import AvailabilitySlot, Booking
 
 @admin.register(AvailabilitySlot)
 class AvailabilitySlotAdmin(admin.ModelAdmin):
-    list_display = ('professional', 'date', 'start_time', 'session_type', 'is_booked', 'price')
-    list_filter = ('is_booked', 'session_type', 'date')
+    list_display = ('professional', 'date', 'start_time', 'end_time', 'max_capacity', 'session_type', 'price')
+    list_filter = ('session_type', 'date')
     search_fields = ('professional__username',)
 
 @admin.register(Booking)

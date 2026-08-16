@@ -16,7 +16,10 @@ def manage_user_profile(sender, instance, created, **kwargs):
     elif instance.role == CustomUser.Role.PROFESSIONAL:
         # Create Professional profile if it doesn't exist yet
         if not hasattr(instance, 'professional_profile'):
-            ProfessionalProfile.objects.create(user=instance)
+            profile = ProfessionalProfile.objects.create(user=instance)
+            if hasattr(instance, '_specialty_id'):
+                profile.speciality_id = instance._specialty_id
+                profile.save()
 
 @receiver(post_save, sender=CustomUser)
 def save_user_profile(sender, instance, **kwargs):

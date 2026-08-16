@@ -1,0 +1,36 @@
+--- DUMMY ACCOUNTS LIST ---
+Common Password: password123
+
+ATHLETES:
+- athlete_1
+- athlete_2
+- athlete_3
+- athlete_4
+- athlete_5
+- athlete_6
+- athlete_7
+- athlete_8
+- athlete_9
+- athlete_10
+- athlete_11
+- athlete_12
+- athlete_13
+- athlete_14
+- athlete_15
+- athlete_16
+- athlete_17
+- athlete_18
+- athlete_19
+- athlete_20
+
+COACHES:
+- coach_1
+- coach_2
+- coach_3
+- coach_4
+- coach_5
+- coach_6
+- coach_7
+- coach_8
+- coach_9
+- coach_10

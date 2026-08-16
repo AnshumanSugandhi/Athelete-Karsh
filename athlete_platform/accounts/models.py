@@ -8,6 +8,14 @@ class CustomUser(AbstractUser):
     We use AbstractUser to keep standard Django auth features (passwords, emails)
     while adding our custom 'role' field.
     """
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    dob = models.DateField(null=True, blank=True)
+    
+    BLOOD_TYPE_CHOICES = [
+        ('A+', 'A+'), ('A-', 'A-'), ('B+', 'B+'), ('B-', 'B-'),
+        ('O+', 'O+'), ('O-', 'O-'), ('AB+', 'AB+'), ('AB-', 'AB-'),
+    ]
+    blood_type = models.CharField(max_length=3, choices=BLOOD_TYPE_CHOICES, null=True, blank=True)
     
     # 1. Define the role choices as a class attribute for clean referencing
     class Role(models.TextChoices):
