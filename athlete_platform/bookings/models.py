@@ -27,6 +27,9 @@ class AvailabilitySlot(models.Model):
     
     # Where the session takes place (populated by professional)
     meeting_link_or_address = models.CharField(max_length=255, blank=True, help_text="Physical address or custom link")
+    
+    # Status for Cancellation
+    is_cancelled = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['date', 'start_time']
@@ -45,6 +48,7 @@ class Booking(models.Model):
         ('PENDING', 'Pending'),
         ('PAID', 'Paid Successfully'),
         ('FAILED', 'Payment Failed'),
+        ('REFUNDED', 'Refunded'),
     )
     
     # Links the booking to a specific Athlete
@@ -85,3 +89,19 @@ class Review(models.Model):
 
     def __str__(self):
         return f"Review by {self.athlete.username} for {self.professional.username}: {self.rating} Stars"
+
+class Notification(models.Model):
+    """
+    In-App Notifications sent to athletes (e.g., when a session is rescheduled or cancelled).
+    """
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='notifications')
+    title = models.CharField(max_length=100)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Notification for {self.user.username}: {self.title}"

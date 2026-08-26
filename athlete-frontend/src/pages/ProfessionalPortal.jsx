@@ -25,10 +25,29 @@ export default function ProfessionalPortal() {
   const [selectedAthleteLogs, setSelectedAthleteLogs] = useState([]);
   const [selectedAthleteName, setSelectedAthleteName] = useState('');
 
+  // Reschedule State
+  const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [rescheduleData, setRescheduleData] = useState({ date: '', start_time: '', end_time: '' });
+  
+  // UI State
+  const [expandedSlot, setExpandedSlot] = useState(null);
+  const [myProfile, setMyProfile] = useState(null);
+
   useEffect(() => {
+    fetchProfile();
     fetchSlots();
     fetchBookings();
   }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const response = await api.get('auth/user/');
+      setMyProfile(response.data);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
 
   const fetchSlots = async () => {
     try {
@@ -71,14 +90,17 @@ export default function ProfessionalPortal() {
     }
   };
 
-  // --- Booking Handlers ---
   const handleUpdateDetails = async (bookingId) => {
     try {
-      await api.patch(`bookings/${bookingId}/`, {
+      const booking = bookings.find(b => b.id === bookingId);
+      if (!booking) return;
+
+      await api.patch(`slots/${booking.slot}/`, {
         meeting_link_or_address: linkInputs[bookingId]
       });
       alert('Details successfully updated!');
       fetchBookings();
+      fetchSlots();
     } catch (error) {
       console.error('Failed to update details:', error);
       alert('Failed to save details.');
@@ -96,6 +118,50 @@ export default function ProfessionalPortal() {
     }
   };
 
+  const handleGenerateMeet = async (slotId) => {
+    try {
+      const response = await api.post(`slots/${slotId}/generate_meet/`);
+      alert('Google Meet Link successfully generated!');
+      fetchBookings();
+      fetchSlots();
+    } catch (error) {
+      console.error('Failed to generate meet link:', error);
+      const msg = error.response?.data?.error || 'Failed to generate link. Try logging out and back in with Google.';
+      alert(msg);
+    }
+  };
+
+  const handleCancelSlot = async (slotId) => {
+    if (!window.confirm("Are you sure you want to cancel this session? All athletes will be automatically refunded.")) return;
+    try {
+      await api.post(`slots/${slotId}/cancel/`);
+      alert('Session cancelled and refunds initiated.');
+      fetchSlots();
+      fetchBookings();
+    } catch (error) {
+      alert('Failed to cancel session.');
+    }
+  };
+
+  const openRescheduleModal = (slot) => {
+    setSelectedSlot(slot);
+    setRescheduleData({ date: slot.date, start_time: slot.start_time, end_time: slot.end_time });
+    setRescheduleModalOpen(true);
+  };
+
+  const handleRescheduleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`slots/${selectedSlot.id}/reschedule/`, rescheduleData);
+      alert('Session rescheduled successfully!');
+      setRescheduleModalOpen(false);
+      fetchSlots();
+      fetchBookings();
+    } catch (error) {
+      alert('Failed to reschedule session.');
+    }
+  };
+
   const getAverageRating = () => {
     if (slots.length > 0 && slots[0].professional_rating) {
       return `⭐ ${slots[0].professional_rating} (${slots[0].reviews_count} Reviews)`;
@@ -107,10 +173,20 @@ export default function ProfessionalPortal() {
     <div className="min-h-screen bg-slate-50 p-8">
       <div className="max-w-6xl mx-auto">
         
-        <header className="mb-8 flex justify-between items-end">
+        <header className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800">Professional Portal</h1>
-            <p className="text-slate-500 mb-1">Manage your schedule and clients, {username}.</p>
+            <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Professional Portal</h1>
+            <p className="text-slate-500 mt-1 flex items-center">
+              Welcome back, {username} 
+              {myProfile?.professional_profile?.speciality?.name && (
+                <span className="ml-2 text-xs font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full uppercase">
+                  {myProfile.professional_profile.speciality.name}
+                </span>
+              )}
+            </p>
+          </div>
+          
+          <div>
             <p className="text-sm font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full inline-block">
               {getAverageRating()}
             </p>
@@ -179,22 +255,63 @@ export default function ProfessionalPortal() {
                     <div key={slot.id} className="bg-white p-5 rounded-xl shadow flex flex-col justify-between">
                       <div>
                         <div className="flex justify-between mb-2">
-                          <span className="font-bold">{slot.date}</span>
-                          <span className="text-xs font-bold px-2 py-1 rounded bg-green-100 text-green-700">
-                            PUBLISHED
-                          </span>
+                          <span className="font-bold text-slate-800">{slot.date}</span>
+                          {slot.is_cancelled ? (
+                            <span className="text-xs font-bold px-2 py-1 rounded bg-red-100 text-red-700">CANCELLED</span>
+                          ) : (
+                            <span className="text-xs font-bold px-2 py-1 rounded bg-green-100 text-green-700">PUBLISHED</span>
+                          )}
                         </div>
                         <p className="text-sm text-slate-600 mb-2">{slot.start_time.substring(0,5)} - {slot.end_time.substring(0,5)}</p>
                         <p className="font-semibold mt-2 text-sm text-indigo-700">
                           👥 {slot.current_enrollments || 0} / {slot.max_capacity} Enrolled
                         </p>
-                        {slot.session_type === 'ONLINE' && (
+                        {slot.session_type === 'ONLINE' && !slot.is_cancelled && (
                           <button 
-                            onClick={() => window.open(slot.meeting_link_or_address || `https://meet.jit.si/DronaMeet-Session-${slot.id}`, '_blank')}
+                            onClick={() => {
+                              if (slot.meeting_link_or_address) {
+                                window.open(slot.meeting_link_or_address, '_blank');
+                              } else {
+                                alert("You have not provided a Google Meet link for this session yet. Please add one in the Client Roster tab.");
+                              }
+                            }}
                             className="mt-3 w-full bg-indigo-600 text-white font-bold py-1.5 rounded text-sm hover:bg-indigo-700 transition"
                           >
                             🎥 Host Video Session
                           </button>
+                        )}
+                        {!slot.is_cancelled && (
+                          <div className="flex space-x-2 mt-3">
+                            <button onClick={() => openRescheduleModal(slot)} className="flex-1 bg-amber-100 text-amber-700 font-bold py-1.5 rounded text-sm hover:bg-amber-200 transition">
+                              Reschedule
+                            </button>
+                            <button onClick={() => handleCancelSlot(slot.id)} className="flex-1 bg-red-100 text-red-700 font-bold py-1.5 rounded text-sm hover:bg-red-200 transition">
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                        <button 
+                          onClick={() => setExpandedSlot(expandedSlot === slot.id ? null : slot.id)}
+                          className="mt-3 w-full border border-slate-300 text-slate-600 font-bold py-1.5 rounded text-sm hover:bg-slate-50 transition"
+                        >
+                          {expandedSlot === slot.id ? 'Hide Details' : 'View Details & Athletes'}
+                        </button>
+                        
+                        {expandedSlot === slot.id && (
+                          <div className="mt-4 pt-4 border-t border-slate-100">
+                            <h4 className="font-bold text-slate-700 text-sm mb-2">Enrolled Athletes:</h4>
+                            {bookings.filter(b => b.slot === slot.id && b.payment_status === 'PAID').length === 0 ? (
+                              <p className="text-slate-500 text-sm">No one has enrolled yet.</p>
+                            ) : (
+                              <ul className="space-y-1">
+                                {bookings.filter(b => b.slot === slot.id && b.payment_status === 'PAID').map(b => (
+                                  <li key={b.id} className="text-sm bg-slate-50 p-2 rounded text-slate-700 font-medium">
+                                    • {b.athlete_name}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -250,33 +367,49 @@ export default function ProfessionalPortal() {
 
                     {/* Right Column: Provide Meeting Details */}
                     <div className="md:w-1/3 bg-slate-50 p-4 rounded-lg border border-slate-100 flex flex-col justify-center">
-                      {booking.slot_details.session_type === 'ONLINE' ? (
-                        <button 
-                          onClick={() => window.open(booking.slot_details.meeting_link_or_address, '_blank')}
-                          className="w-full bg-indigo-600 text-white font-bold py-2 rounded transition hover:bg-indigo-700 mb-2 shadow-sm"
-                        >
-                          🎥 Host Video Session
-                        </button>
-                      ) : (
-                        <div className="mb-4 space-y-2 border-t pt-4">
-                          <label className="text-xs font-bold text-slate-500 uppercase">Update Meeting Address</label>
-                          <div className="flex gap-2">
-                            <input 
-                              type="text" 
-                              value={linkInputs[booking.id] || ''}
-                              onChange={(e) => setLinkInputs({...linkInputs, [booking.id]: e.target.value})}
-                              placeholder="e.g., Stadium Track 3"
-                              className="flex-1 px-3 py-1.5 text-sm border rounded focus:ring-2 focus:ring-slate-500"
-                            />
-                            <button 
-                              onClick={() => handleUpdateDetails(booking.id)}
-                              className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-amber-700 transition"
-                            >
-                              Save
-                            </button>
-                          </div>
+                      {booking.slot_details.session_type === 'ONLINE' && (
+                        <div className="flex gap-2 mb-2">
+                          <button 
+                            onClick={() => {
+                              if (booking.slot_details.meeting_link_or_address) {
+                                window.open(booking.slot_details.meeting_link_or_address, '_blank');
+                              } else {
+                                alert("You have not provided a Google Meet link for this session yet. Please paste one in the input box below and save.");
+                              }
+                            }}
+                            className="flex-1 bg-indigo-600 text-white font-bold py-2 rounded transition hover:bg-indigo-700 shadow-sm text-sm"
+                          >
+                            🎥 Host Video Session
+                          </button>
+                          <button
+                            onClick={() => handleGenerateMeet(booking.slot_details.id)}
+                            title="Generate New Google Meet"
+                            className="bg-emerald-600 text-white font-bold py-2 px-3 rounded transition hover:bg-emerald-700 shadow-sm text-sm whitespace-nowrap"
+                          >
+                            ✨ Generate Meet
+                          </button>
                         </div>
                       )}
+                      <div className="mb-4 space-y-2 border-t pt-4">
+                        <label className="text-xs font-bold text-slate-500 uppercase">
+                          {booking.slot_details.session_type === 'ONLINE' ? 'Update Meeting Link' : 'Update Meeting Address'}
+                        </label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            value={linkInputs[booking.id] || ''}
+                            onChange={(e) => setLinkInputs({...linkInputs, [booking.id]: e.target.value})}
+                            placeholder={booking.slot_details.session_type === 'ONLINE' ? "Paste Google Meet Link..." : "e.g., Stadium Track 3"}
+                            className="flex-1 px-3 py-1.5 text-sm border rounded focus:ring-2 focus:ring-slate-500"
+                          />
+                          <button 
+                            onClick={() => handleUpdateDetails(booking.id)}
+                            className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-amber-700 transition"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
 
                       {/* View Performance Button */}
                       <button 
@@ -361,6 +494,54 @@ export default function ProfessionalPortal() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
+
+                  <div className="h-64 border border-slate-100 rounded-xl p-4 shadow-sm">
+                    <h3 className="font-bold text-slate-700 mb-2">Recovery: Soreness, Stress & Fatigue</h3>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={selectedAthleteLogs} margin={{ top: 5, right: 20, bottom: 25, left: 0 }}>
+                        <Line type="monotone" dataKey="fatigue_level" stroke="#f59e0b" name="Fatigue" strokeWidth={2} />
+                        <Line type="monotone" dataKey="muscle_soreness" stroke="#ef4444" name="Soreness" strokeWidth={2} />
+                        <Line type="monotone" dataKey="stress_level" stroke="#8b5cf6" name="Stress" strokeWidth={2} />
+                        <CartesianGrid stroke="#ccc" strokeDasharray="5 5" />
+                        <XAxis dataKey="date" />
+                        <YAxis domain={[0, 10]} />
+                        <Tooltip />
+                        <Legend />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="h-64 border border-slate-100 rounded-xl p-4 shadow-sm">
+                      <h3 className="font-bold text-slate-700 mb-2">Resting Heart Rate</h3>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={selectedAthleteLogs} margin={{ top: 5, right: 20, bottom: 25, left: 0 }}>
+                          <Line type="monotone" dataKey="resting_heart_rate" stroke="#ec4899" name="RHR (BPM)" strokeWidth={2} />
+                          <CartesianGrid stroke="#ccc" strokeDasharray="5 5" />
+                          <XAxis dataKey="date" />
+                          <YAxis domain={['auto', 'auto']} />
+                          <Tooltip />
+                          <Legend />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="h-64 border border-slate-100 rounded-xl p-4 shadow-sm">
+                      <h3 className="font-bold text-slate-700 mb-2">Nutrition & Hydration</h3>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={selectedAthleteLogs} margin={{ top: 5, right: 20, bottom: 25, left: 0 }}>
+                          <Line type="monotone" dataKey="diet_quality" stroke="#14b8a6" name="Diet (1-10)" strokeWidth={2} />
+                          <Line type="monotone" dataKey="hydration_liters" stroke="#0ea5e9" name="Hydration (L)" strokeWidth={2} />
+                          <CartesianGrid stroke="#ccc" strokeDasharray="5 5" />
+                          <XAxis dataKey="date" />
+                          <YAxis yAxisId="left" domain={[0, 10]} />
+                          <YAxis yAxisId="right" orientation="right" />
+                          <Tooltip />
+                          <Legend />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                   
                   <div>
                     <h3 className="font-bold text-slate-700 mb-2">Recent Notes</h3>
@@ -380,6 +561,40 @@ export default function ProfessionalPortal() {
         )}
 
       </div>
+
+      {/* RESCHEDULE MODAL */}
+      {rescheduleModalOpen && selectedSlot && (
+        <div className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative">
+            <button 
+              onClick={() => setRescheduleModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 font-bold text-xl"
+            >
+              &times;
+            </button>
+            <h2 className="text-2xl font-bold text-slate-800 mb-4">Reschedule Session</h2>
+            <p className="text-slate-600 mb-4">Athletes will be automatically notified of this change.</p>
+            <form onSubmit={handleRescheduleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1">New Date</label>
+                <input type="date" value={rescheduleData.date} onChange={(e) => setRescheduleData({...rescheduleData, date: e.target.value})} required className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-1">New Start</label>
+                  <input type="time" value={rescheduleData.start_time} onChange={(e) => setRescheduleData({...rescheduleData, start_time: e.target.value})} required className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-1">New End</label>
+                  <input type="time" value={rescheduleData.end_time} onChange={(e) => setRescheduleData({...rescheduleData, end_time: e.target.value})} required className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" />
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-amber-600 text-white font-bold py-3 rounded-lg hover:bg-amber-700 transition">Confirm Reschedule</button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

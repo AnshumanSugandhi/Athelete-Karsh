@@ -12,7 +12,16 @@ export default function AthleteDashboard() {
   const [activeTab, setActiveTab] = useState('explore'); // 'explore' or 'bookings'
   const [slots, setSlots] = useState([]);
   const [myBookings, setMyBookings] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [dbSpecialties, setDbSpecialties] = useState([]);
+  
+  // Marketplace Filters
+  const [filterType, setFilterType] = useState('ALL');
+  const [filterSpecialty, setFilterSpecialty] = useState('ALL');
+  const [maxPrice, setMaxPrice] = useState(10000);
+  const [sortBy, setSortBy] = useState('DATE_ASC');
   
   // Intake form state
   const [bookingForm, setBookingForm] = useState({
@@ -28,6 +37,12 @@ export default function AthleteDashboard() {
     fatigue_level: '5',
     training_duration_mins: '60',
     perceived_exertion: '5',
+    muscle_soreness: '1',
+    stress_level: '1',
+    resting_heart_rate: '',
+    weight_kg: '',
+    diet_quality: '5',
+    hydration_liters: '2.0',
     notes: ''
   });
 
@@ -36,12 +51,67 @@ export default function AthleteDashboard() {
   const [selectedBookingForReview, setSelectedBookingForReview] = useState(null);
   const [reviewForm, setReviewForm] = useState({ rating: '5', comment: '' });
 
-  // Fetch available slots and user's bookings on load
+  // Derived Marketplace Slots
+  const specialties = ['ALL', ...new Set(slots.map(s => s.professional_specialty).filter(Boolean))];
+  
+  const filteredSlots = slots.filter(slot => {
+    if (filterType !== 'ALL' && slot.session_type !== filterType) return false;
+    if (filterSpecialty !== 'ALL' && slot.professional_specialty !== filterSpecialty) return false;
+    if (parseFloat(slot.price) > maxPrice) return false;
+    return true;
+  }).sort((a, b) => {
+    if (sortBy === 'PRICE_ASC') return parseFloat(a.price) - parseFloat(b.price);
+    if (sortBy === 'PRICE_DESC') return parseFloat(b.price) - parseFloat(a.price);
+    if (sortBy === 'RATING_DESC') return (b.professional_rating || 0) - (a.professional_rating || 0);
+    // Default DATE_ASC
+    const dateA = new Date(`${a.date}T${a.start_time}`);
+    const dateB = new Date(`${b.date}T${b.start_time}`);
+    return dateA - dateB;
+  });
+
   useEffect(() => {
     fetchAvailableSlots();
     fetchMyBookings();
     fetchPerformanceLogs();
+    fetchNotifications();
+    fetchSpecialties();
+
+    // Poll for notifications every 10 seconds
+    const intervalId = setInterval(() => {
+      fetchNotifications();
+      fetchMyBookings(); // Also keep bookings fresh
+    }, 10000);
+
+    return () => clearInterval(intervalId);
   }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const response = await api.get('notifications/');
+      setNotifications(response.data);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    }
+  };
+
+  const fetchSpecialties = async () => {
+    try {
+      const response = await api.get('specialties/');
+      // Extract just the specialty names
+      setDbSpecialties(response.data.map(s => s.name));
+    } catch (error) {
+      console.error('Failed to fetch specialties:', error);
+    }
+  };
+
+  const markNotificationsRead = async () => {
+    try {
+      await api.post('notifications/mark_all_read/');
+      fetchNotifications();
+    } catch (error) {
+      console.error('Failed to mark notifications read:', error);
+    }
+  };
 
   const fetchPerformanceLogs = async () => {
     try {
@@ -133,26 +203,7 @@ export default function AthleteDashboard() {
       const bookingData = response.data;
       console.log("Booking Data:", bookingData);
       
-      // TEST MODE BYPASS (Forced for all local testing)
-      try {
-        await api.post(`bookings/${bookingData.id}/verify_payment/`, {
-          razorpay_payment_id: 'pay_test123',
-          razorpay_order_id: bookingData.razorpay_order_id || 'test_order_123',
-          razorpay_signature: 'test_signature'
-        });
-        alert('Test Session Booked successfully! (Razorpay bypassed)');
-        setSelectedSlot(null);
-        setBookingForm({ current_goal: '', past_injury: '' });
-        fetchAvailableSlots();
-        fetchMyBookings(); 
-        setActiveTab('bookings');
-      } catch (error) {
-        console.error("Test Verification failed:", error);
-        alert("Test payment verification failed. See console for details.");
-      }
-      return;
-      
-      // 2. Load Razorpay (UNREACHABLE IN TEST MODE)
+      // 2. Load Razorpay
       const res = await loadRazorpayScript();
       if (!res) {
         alert('Razorpay SDK failed to load. Are you online?');
@@ -161,7 +212,7 @@ export default function AthleteDashboard() {
 
       // 3. Configure the Razorpay Popup
       const options = {
-        key: 'rzp_test_your_actual_key_here', // IMPORTANT: Replace with your actual Test Key ID
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Use real key from .env
         amount: selectedSlot.price * 100, // Amount in paise
         currency: 'INR',
         name: 'DronaMeet Athlete Platform',
@@ -217,9 +268,47 @@ export default function AthleteDashboard() {
       <div className="max-w-6xl mx-auto">
         
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">Athlete Dashboard</h1>
-            <p className="text-slate-500">Welcome back, {username}.</p>
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-800">Athlete Dashboard</h1>
+              <p className="text-slate-500">Welcome back, {username}.</p>
+            </div>
+            
+            {/* Notification Bell */}
+            <div className="relative ml-auto">
+              <button 
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  if (notifications.some(n => !n.is_read)) markNotificationsRead();
+                }}
+                className="relative p-2 text-slate-600 hover:text-amber-600 transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                {notifications.some(n => !n.is_read) && (
+                  <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-slate-50"></span>
+                )}
+              </button>
+              
+              {/* Notification Dropdown */}
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50">
+                  <div className="p-3 bg-slate-50 border-b border-slate-100 font-bold text-slate-700">Notifications</div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-slate-500">No new notifications.</div>
+                    ) : (
+                      notifications.map(n => (
+                        <div key={n.id} className={`p-4 border-b border-slate-50 text-sm ${n.is_read ? 'opacity-60' : 'bg-amber-50/30'}`}>
+                          <div className="font-bold text-slate-700">{n.title}</div>
+                          <div className="text-slate-600 mt-1">{n.message}</div>
+                          <div className="text-xs text-slate-400 mt-2">{new Date(n.created_at).toLocaleDateString()}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           
           {/* Tab Navigation */}
@@ -272,8 +361,38 @@ export default function AthleteDashboard() {
                     <input type="number" min="1" max="10" name="fatigue_level" value={performanceForm.fatigue_level} onChange={handlePerfChange} required className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" />
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Muscle Soreness (1-10)</label>
+                    <input type="number" min="1" max="10" name="muscle_soreness" value={performanceForm.muscle_soreness} onChange={handlePerfChange} required className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Stress Level (1-10)</label>
+                    <input type="number" min="1" max="10" name="stress_level" value={performanceForm.stress_level} onChange={handlePerfChange} required className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Resting HR (BPM)</label>
+                    <input type="number" min="30" max="200" name="resting_heart_rate" value={performanceForm.resting_heart_rate} onChange={handlePerfChange} className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" placeholder="e.g. 55" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Weight (kg)</label>
+                    <input type="number" step="0.1" name="weight_kg" value={performanceForm.weight_kg} onChange={handlePerfChange} className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" placeholder="e.g. 75.5" />
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-slate-600 mb-1">RPE / Exertion (1-10)</label>
                     <input type="number" min="1" max="10" name="perceived_exertion" value={performanceForm.perceived_exertion} onChange={handlePerfChange} required className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Diet Quality (1-10)</label>
+                    <input type="number" min="1" max="10" name="diet_quality" value={performanceForm.diet_quality} onChange={handlePerfChange} required className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Hydration (Liters)</label>
+                    <input type="number" step="0.1" name="hydration_liters" value={performanceForm.hydration_liters} onChange={handlePerfChange} required className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-amber-500" />
                   </div>
                 </div>
                 <div>
@@ -324,6 +443,66 @@ export default function AthleteDashboard() {
                   <div className="flex items-center justify-center h-full text-slate-400">Log some data to see your charts.</div>
                 )}
               </div>
+
+              <div className="bg-white p-6 rounded-xl shadow border border-slate-100 h-80">
+                <h2 className="text-xl font-bold text-slate-700 mb-4">Recovery: Soreness, Stress & Fatigue</h2>
+                {performanceLogs.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={performanceLogs} margin={{ top: 5, right: 20, bottom: 25, left: 0 }}>
+                      <Line type="monotone" dataKey="fatigue_level" stroke="#f59e0b" name="Fatigue" strokeWidth={2} />
+                      <Line type="monotone" dataKey="muscle_soreness" stroke="#ef4444" name="Soreness" strokeWidth={2} />
+                      <Line type="monotone" dataKey="stress_level" stroke="#8b5cf6" name="Stress" strokeWidth={2} />
+                      <CartesianGrid stroke="#ccc" strokeDasharray="5 5" />
+                      <XAxis dataKey="date" />
+                      <YAxis domain={[0, 10]} />
+                      <Tooltip />
+                      <Legend />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-slate-400">Log some data to see your charts.</div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow border border-slate-100 h-80">
+                  <h2 className="text-xl font-bold text-slate-700 mb-4">Resting Heart Rate</h2>
+                  {performanceLogs.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={performanceLogs} margin={{ top: 5, right: 20, bottom: 25, left: 0 }}>
+                        <Line type="monotone" dataKey="resting_heart_rate" stroke="#ec4899" name="RHR (BPM)" strokeWidth={2} />
+                        <CartesianGrid stroke="#ccc" strokeDasharray="5 5" />
+                        <XAxis dataKey="date" />
+                        <YAxis domain={['auto', 'auto']} />
+                        <Tooltip />
+                        <Legend />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400">Log some data to see your charts.</div>
+                  )}
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow border border-slate-100 h-80">
+                  <h2 className="text-xl font-bold text-slate-700 mb-4">Nutrition & Hydration</h2>
+                  {performanceLogs.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={performanceLogs} margin={{ top: 5, right: 20, bottom: 25, left: 0 }}>
+                        <Line type="monotone" dataKey="diet_quality" stroke="#14b8a6" name="Diet (1-10)" strokeWidth={2} />
+                        <Line type="monotone" dataKey="hydration_liters" stroke="#0ea5e9" name="Hydration (L)" strokeWidth={2} />
+                        <CartesianGrid stroke="#ccc" strokeDasharray="5 5" />
+                        <XAxis dataKey="date" />
+                        <YAxis yAxisId="left" domain={[0, 10]} />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip />
+                        <Legend />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400">Log some data to see your charts.</div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -347,25 +526,38 @@ export default function AthleteDashboard() {
                           <p className="text-slate-500 text-sm">{booking.slot_details.session_type} Session</p>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          booking.payment_status === 'PAID' ? 'bg-amber-100 text-amber-800' : 'bg-amber-100 text-amber-800'
+                          booking.payment_status === 'PAID' ? 'bg-amber-100 text-amber-800' : 
+                          booking.payment_status === 'REFUNDED' ? 'bg-red-100 text-red-800' : 'bg-slate-200 text-slate-800'
                         }`}>
-                          {booking.payment_status}
+                          {booking.slot_details.is_cancelled ? 'CANCELLED & REFUNDED' : booking.payment_status}
                         </span>
                       </div>
                       
                       <div className="text-slate-700 font-medium space-y-1 mb-4 bg-slate-50 p-3 rounded">
-                        <p>📅 {booking.slot_details.date}</p>
-                        <p>⏰ {booking.slot_details.start_time.substring(0,5)} - {booking.slot_details.end_time.substring(0,5)}</p>
+                        <p className={booking.slot_details.is_cancelled ? "line-through text-slate-400" : ""}>📅 {booking.slot_details.date}</p>
+                        <p className={booking.slot_details.is_cancelled ? "line-through text-slate-400" : ""}>⏰ {booking.slot_details.start_time.substring(0,5)} - {booking.slot_details.end_time.substring(0,5)}</p>
+                        
+                        <div className="mt-3 pt-3 border-t border-slate-200">
+                          <p className="text-xs text-slate-500 font-bold uppercase mb-1">Your Details</p>
+                          <p className="text-sm"><span className="font-semibold">Goal:</span> {booking.current_goal || 'None provided'}</p>
+                          <p className="text-sm"><span className="font-semibold">Injury:</span> {booking.past_injury || 'None provided'}</p>
+                        </div>
                       </div>
                     </div>
 
                     {/* Show meeting details only if they successfully paid! */}
-                    {booking.payment_status === 'PAID' && (
+                    {booking.payment_status === 'PAID' && !booking.slot_details.is_cancelled && (
                        <div className="border-t pt-4">
                           <p className="text-xs text-slate-500 font-bold uppercase mb-1">Fulfillment Details</p>
                           {booking.slot_details.session_type === 'ONLINE' ? (
                             <button 
-                              onClick={() => window.open(booking.slot_details.meeting_link_or_address, '_blank')}
+                              onClick={() => {
+                                if (booking.slot_details.meeting_link_or_address) {
+                                  window.open(booking.slot_details.meeting_link_or_address, '_blank');
+                                } else {
+                                  alert("Your coach has not provided the Google Meet link yet. Please check back closer to the session time or message them.");
+                                }
+                              }}
                               className="w-full bg-indigo-600 text-white font-bold py-2 rounded text-sm hover:bg-indigo-700 transition shadow-sm mb-2"
                             >
                               🎥 Join Video Session
@@ -467,14 +659,63 @@ export default function AthleteDashboard() {
               </div>
             ) : (
               <div>
-                <h2 className="text-xl font-bold text-slate-700 mb-4">Available Coaching Slots</h2>
-                {slots.length === 0 ? (
+                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                  <h2 className="text-xl font-bold text-slate-700">Marketplace</h2>
+                  <div className="flex flex-wrap gap-3">
+                    <select 
+                      value={sortBy} 
+                      onChange={e => setSortBy(e.target.value)}
+                      className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm bg-white"
+                    >
+                      <option value="DATE_ASC">Sort: Soonest</option>
+                      <option value="PRICE_ASC">Sort: Price (Low to High)</option>
+                      <option value="PRICE_DESC">Sort: Price (High to Low)</option>
+                      <option value="RATING_DESC">Sort: Top Rated</option>
+                    </select>
+
+                    <select 
+                      value={filterType} 
+                      onChange={e => setFilterType(e.target.value)}
+                      className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm bg-white"
+                    >
+                      <option value="ALL">All Types</option>
+                      <option value="ONLINE">Online Only</option>
+                      <option value="OFFLINE">Offline Only</option>
+                    </select>
+
+                    <select 
+                      value={filterSpecialty} 
+                      onChange={e => setFilterSpecialty(e.target.value)}
+                      className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm bg-white max-w-[150px]"
+                    >
+                      <option value="ALL">All Specialties</option>
+                      {dbSpecialties.map(spec => (
+                        <option key={spec} value={spec}>{spec}</option>
+                      ))}
+                    </select>
+                    
+                    <div className="flex items-center gap-2 bg-white px-3 py-2 border rounded-lg">
+                      <label className="text-sm text-slate-600">Max ₹{maxPrice}</label>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="10000" 
+                        step="500"
+                        value={maxPrice} 
+                        onChange={e => setMaxPrice(e.target.value)}
+                        className="w-24"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {filteredSlots.length === 0 ? (
                   <div className="bg-white p-8 rounded-xl shadow text-center text-slate-500">
-                    No slots are currently available. Please check back later!
+                    No slots match your filters. Please try broadening your search!
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {slots.map(slot => (
+                    {filteredSlots.map(slot => (
                       <div key={slot.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition">
                         <div className="flex justify-between items-start mb-4">
                           <div>
@@ -485,6 +726,9 @@ export default function AthleteDashboard() {
                               </span>
                             </h3>
                             <p className="text-amber-600 font-medium text-sm">{slot.session_type} Session</p>
+                            <p className="text-slate-500 text-xs mt-1 bg-slate-100 inline-block px-2 py-0.5 rounded uppercase font-semibold">
+                              {slot.professional_specialty || 'Coach'}
+                            </p>
                           </div>
                           <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm font-bold">
                             ₹{slot.price}

@@ -70,6 +70,7 @@ export default function Register() {
     onSuccess: handleGoogleSuccess,
     onError: () => setError('Google Sign-Up was unsuccessful.'),
     flow: 'auth-code',
+    scope: 'openid profile email https://www.googleapis.com/auth/calendar.events',
   });
 
   return (

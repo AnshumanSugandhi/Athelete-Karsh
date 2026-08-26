@@ -47,6 +47,7 @@ export default function Login() {
     onSuccess: handleGoogleSuccess,
     onError: () => setError('Google Sign-In was unsuccessful.'),
     flow: 'auth-code',
+    scope: 'openid profile email https://www.googleapis.com/auth/calendar.events',
   });
 
   // Handle typing in the input fields

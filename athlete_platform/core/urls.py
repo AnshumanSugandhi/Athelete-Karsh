@@ -6,7 +6,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 # Import our new views
 from sports.views import SportViewSet, SpecialtyViewSet
-from bookings.views import AvailabilitySlotViewSet, BookingViewSet 
+from bookings.views import AvailabilitySlotViewSet, BookingViewSet, NotificationViewSet
 from accounts.views import UserProfileView, AdminUserViewSet, GoogleLogin
 from learning.views import ModuleViewSet
 from chat.views import ConversationViewSet, MessageViewSet
@@ -28,6 +28,7 @@ router.register(r'conversations', ConversationViewSet, basename='conversation')
 router.register(r'messages', MessageViewSet, basename='message')
 router.register(r'performance', DailyLogViewSet, basename='performance')
 router.register(r'reviews', ReviewViewSet, basename='review')
+router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -37,6 +38,9 @@ urlpatterns = [
     
     # ADD THIS LINE FOR REGISTRATION:
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
+    
+    # Required by allauth to resolve socialaccount_signup
+    path('accounts/', include('allauth.urls')),
     
     # Google OAuth Endpoint
     path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),

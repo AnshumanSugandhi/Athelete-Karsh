@@ -1,21 +1,22 @@
 # bookings/serializers.py
 from rest_framework import serializers
-from .models import AvailabilitySlot, Booking, Review
+from .models import AvailabilitySlot, Booking, Review, Notification
 
 class AvailabilitySlotSerializer(serializers.ModelSerializer):
     professional_name = serializers.CharField(source='professional.username', read_only=True)
     professional_rating = serializers.SerializerMethodField()
     reviews_count = serializers.SerializerMethodField()
     current_enrollments = serializers.SerializerMethodField()
+    professional_specialty = serializers.SerializerMethodField()
 
     class Meta:
         model = AvailabilitySlot
         fields = [
-            'id', 'professional', 'professional_name', 'professional_rating', 'reviews_count', 
+            'id', 'professional', 'professional_name', 'professional_specialty', 'professional_rating', 'reviews_count', 
             'date', 'start_time', 'end_time', 'session_type', 'max_capacity', 
-            'current_enrollments', 'meeting_link_or_address', 'price'
+            'current_enrollments', 'meeting_link_or_address', 'price', 'is_cancelled'
         ]
-        read_only_fields = ['professional', 'current_enrollments']
+        read_only_fields = ['professional', 'current_enrollments', 'is_cancelled']
 
     def get_professional_rating(self, obj):
         reviews = obj.professional.reviews_received.all()
@@ -28,6 +29,13 @@ class AvailabilitySlotSerializer(serializers.ModelSerializer):
 
     def get_current_enrollments(self, obj):
         return obj.booking_record.filter(payment_status='PAID').count()
+        
+    def get_professional_specialty(self, obj):
+        try:
+            profile = obj.professional.professional_profile
+            return profile.speciality.name if profile.speciality else "General Coach"
+        except Exception:
+            return "General Coach"
 
 # bookings/serializers.py
 
@@ -56,3 +64,9 @@ class ReviewSerializer(serializers.ModelSerializer):
         model = Review
         fields = ['id', 'booking', 'athlete', 'athlete_name', 'professional', 'rating', 'comment', 'created_at']
         read_only_fields = ['athlete', 'professional']
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'user', 'title', 'message', 'is_read', 'created_at']
+        read_only_fields = ['user', 'title', 'message', 'created_at']
