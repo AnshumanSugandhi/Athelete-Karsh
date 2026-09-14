@@ -44,8 +44,8 @@ Be encouraging, highly professional, and direct. Use bullet points where appropr
 """
 
     try:
-        # We use gemini-1.5-flash as it is fast and highly cost-effective for these text tasks
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # We use gemini-2.5-flash as it is fast and highly cost-effective for these text tasks
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
