@@ -39,7 +39,8 @@ export default function Profile() {
       // FIX: Ensure the avatar URL points to the Django backend, not the React frontend
       let avatarUrl = data.avatar;
       if (avatarUrl && !avatarUrl.startsWith('http')) {
-        avatarUrl = `http://127.0.0.1:8000${avatarUrl}`;
+        const mediaBaseUrl = import.meta.env.VITE_MEDIA_BASE_URL || 'http://127.0.0.1:8000';
+        avatarUrl = `${mediaBaseUrl}${avatarUrl}`;
       }
       setAvatarPreview(avatarUrl || null);
       

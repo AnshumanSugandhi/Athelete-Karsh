@@ -40,7 +40,10 @@ export default function Chat() {
       fetchMessages(activeChat.id);
 
       // 2. Open WebSocket
-      const wsUrl = `ws://127.0.0.1:8000/ws/chat/${activeChat.id}/`;
+      // Use dynamic WS URL
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsBaseUrl = import.meta.env.VITE_WS_BASE_URL || `${wsProtocol}//127.0.0.1:8000`;
+      const wsUrl = `${wsBaseUrl}/ws/chat/${activeChat.id}/`;
       ws = new WebSocket(wsUrl);
 
       ws.onmessage = (event) => {

@@ -42,3 +42,4 @@ urllib3
 whitenoise
 zope.interface
 dj-database-url
+google-generativeai

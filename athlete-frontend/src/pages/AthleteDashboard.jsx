@@ -405,6 +405,24 @@ export default function AthleteDashboard() {
 
             {/* Right: Charts */}
             <div className="lg:col-span-2 space-y-6">
+              
+              {/* AI Analysis Link */}
+              <div className="bg-gradient-to-r from-slate-900 to-black p-6 rounded-xl shadow-lg border border-slate-800 flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zm0 14l-10-5v2l10 5 10-5v-2l-10 5zm0 4l-10-5v2l10 5 10-5v-2l-10 5z"/></svg>
+                    AI Performance Analysis
+                  </h2>
+                  <p className="text-slate-400 text-sm mt-1">Get custom diet, exercise, and recovery plans based on your logs.</p>
+                </div>
+                <button
+                  onClick={() => navigate('/performance')}
+                  className="bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold py-2 px-6 rounded-lg hover:opacity-90 transition shadow-lg shadow-orange-500/20 whitespace-nowrap"
+                >
+                  Generate Plan
+                </button>
+              </div>
+
               <div className="bg-white p-6 rounded-xl shadow border border-slate-100 h-80">
                 <h2 className="text-xl font-bold text-slate-700 mb-4">Fatigue vs Exertion (RPE)</h2>
                 {performanceLogs.length > 0 ? (

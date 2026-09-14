@@ -1,6 +1,9 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from .models import DailyLog
 from .serializers import DailyLogSerializer
+from .gemini_service import generate_performance_analysis
 
 class DailyLogViewSet(viewsets.ModelViewSet):
     serializer_class = DailyLogSerializer
@@ -24,3 +27,24 @@ class DailyLogViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(athlete=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def ai_analysis(self, request):
+        """
+        Generates an AI performance analysis based on the athlete's last 7 logs.
+        """
+        if request.user.role != 'ATHLETE':
+            return Response({"error": "Only athletes can generate personal AI analysis."}, status=status.HTTP_403_FORBIDDEN)
+            
+        # Get the last 7 days of logs for this athlete
+        recent_logs = DailyLog.objects.filter(athlete=request.user).order_by('-date')[:7]
+        
+        if not recent_logs:
+            return Response({"analysis": "You don't have any daily logs yet. Please fill out your daily performance tracker first!"})
+            
+        # Call the Gemini service
+        analysis_markdown = generate_performance_analysis(recent_logs)
+        
+        return Response({
+            "analysis": analysis_markdown
+        })

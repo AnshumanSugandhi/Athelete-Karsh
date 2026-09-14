@@ -16,6 +16,7 @@ import Chat from './pages/Chat';
 // Component Imports
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import PerformanceAnalysis from './pages/PerformanceAnalysis';
 
 export default function App() {
   return (
@@ -27,7 +28,7 @@ export default function App() {
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+          <Route path="/register" element={<Register />} />
         
         {/* Dashboard Routes */}
         <Route path="/athlete" element={<AthleteDashboard />} />
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/learning" element={<LearningHub />} />
         <Route path="/chat" element={<Chat />} />
+        <Route path="/performance" element={<PerformanceAnalysis />} />
         
         {/* Account Route */}
         <Route path="/profile" element={<Profile />} />
